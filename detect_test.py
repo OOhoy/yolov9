@@ -3,12 +3,15 @@ import os
 import platform
 import sys
 from pathlib import Path
+import numpy as np
 
 import torch
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLO root directory
-
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # add ROOT to PATH
+ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
@@ -56,6 +59,15 @@ def run(
     screenshot = source.lower().startswith('screen')
     if is_url and is_file:
         source = check_file(source)  # download
+    
+    def show_alert():
+        cv2.namedWindow("Warning", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Warning", 400, 100)
+        img = np.zeros((100, 480, 3), np.uint8)
+        cv2.putText(img, 'Warning! Not wearing PPE', (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+        cv2.imshow("Warning", img)
+        cv2.waitKey(2500)  # 2초 동안 대기
+        cv2.destroyWindow("Warning")
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -103,6 +115,9 @@ def run(
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
         # Process predictions
+        classes_to_detect = ['no boots', 'no gloves', 'no helmet']
+        detected_classes = set()
+        
         for i, det in enumerate(pred):  # per image
             seen += 1
             if webcam:  # batch_size >= 1
@@ -126,6 +141,10 @@ def run(
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    detected_class_name = model.names[int(c)]
+                    if detected_class_name in classes_to_detect:
+                        detected_classes.add(detected_class_name)
+                    print(f"{n} {detected_class_name}{'s' * (n > 1)} detected")
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
@@ -151,6 +170,9 @@ def run(
                     cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
                 cv2.imshow(str(p), im0)
                 cv2.waitKey(1)  # 1 millisecond
+                
+            if detected_classes:
+              show_alert()
 
             # Save results (image with detections)
             if save_img:
